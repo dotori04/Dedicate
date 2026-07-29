@@ -4,6 +4,7 @@
 #include "Player/DDPlayerController.h"
 
 #include "DDChatInput.h"
+#include "DDPlayerState.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Dedicate.h"
 #include "EngineUtils.h"
@@ -34,7 +35,19 @@ void ADDPlayerController::BeginPlay()
 void ADDPlayerController::SetChatMessageString(const FString& InChatMessageString)
 {
 	ChatMessageString = InChatMessageString;
-	PrintChatMessageString(ChatMessageString);
+	
+	if (IsLocalController() == true)
+	{
+		// ServerRPCPrintChatMessageString(InChatMessageString);
+
+		ADDPlayerState* DDPS = GetPlayerState<ADDPlayerState>();
+		if (IsValid(DDPS) == true)
+		{
+			FString CombinedMessageString = DDPS->PlyaerNameString + TEXT(": ") + InChatMessageString;
+
+			ServerRPCPrintChatMessageString(CombinedMessageString);
+		}
+	}
 }
 
 void ADDPlayerController::PrintChatMessageString(const FString& InChatMessageString)
@@ -52,7 +65,12 @@ void ADDPlayerController::SetChatMessagesString(const FString& InChatMessagesStr
 	//PrintChatMessageString(InChatMessageString);
 	if (IsLocalController() == true)
 	{
-		ServerRPCPrintChatMessageString(InChatMessagesString);		
+		ADDPlayerState* DDPS = GetPlayerState<ADDPlayerState>();
+		if (IsValid(DDPS) == true)
+		{
+			FString CombinedMessageString = DDPS->GetPlayerInfoString() + TEXT(": ") + InChatMessagesString;
+			ServerRPCPrintChatMessageString(CombinedMessageString);
+		}
 	}
 }
 

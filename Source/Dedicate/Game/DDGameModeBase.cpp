@@ -5,6 +5,7 @@
 #include "DDGameStateBase.h"
 #include "Player/DDPlayerController.h"
 #include "EngineUtils.h"
+#include "Player/DDPlayerState.h"
 
 void ADDGameModeBase::OnPostLogin(AController* NewPlayer)
 {
@@ -14,6 +15,18 @@ void ADDGameModeBase::OnPostLogin(AController* NewPlayer)
 	if (IsValid(DDPlayerController) == true)
 	{
 		AllPlayerControllers.Add(DDPlayerController);
+
+		ADDPlayerState* CXPS = DDPlayerController->GetPlayerState<ADDPlayerState>();
+		if (IsValid(CXPS) == true)
+		{
+			CXPS->PlyaerNameString = TEXT("Player") + FString::FromInt(AllPlayerControllers.Num());
+		}
+
+		ADDGameStateBase* CXGameStateBase =  GetGameState<ADDGameStateBase>();
+		if (IsValid(CXGameStateBase) == true)
+		{
+			CXGameStateBase->MulticastRPCBroadcastLoginMessage(CXPS->PlyaerNameString);
+		}
 	}
 
 }
@@ -118,6 +131,7 @@ void ADDGameModeBase::PrintChatMessageString(ADDPlayerController* InChattingPlay
 	if (IsGuessNumberString(GuessNumberString) == true)
 	{
 		FString JudgeResultString = JudgeResult(SecretNumberString, GuessNumberString);
+		IncreaseGuessCount(InChattingPlayerController);
 		for (TActorIterator<ADDPlayerController> It(GetWorld()); It; ++It)
 		{
 			ADDPlayerController* CXPlayerController = *It;
@@ -132,11 +146,20 @@ void ADDGameModeBase::PrintChatMessageString(ADDPlayerController* InChattingPlay
 	{
 		for (TActorIterator<ADDPlayerController> It(GetWorld()); It; ++It)
 		{
-			ADDPlayerController* CXPlayerController = *It;
-			if (IsValid(CXPlayerController) == true)
+			ADDPlayerController* DDPlayerController = *It;
+			if (IsValid(DDPlayerController) == true)
 			{
-				CXPlayerController->ClientRPCPrintChatMessageString(InChatMessageString);
+				DDPlayerController->ClientRPCPrintChatMessageString(InChatMessageString);
 			}
 		}
+	}
+}
+
+void ADDGameModeBase::IncreaseGuessCount(ADDPlayerController* InChattingPlayerController)
+{
+	ADDPlayerState* DDPS = InChattingPlayerController->GetPlayerState<ADDPlayerState>();
+	if (IsValid(DDPS) == true)
+	{
+		DDPS->CurrentGuessCount++;
 	}
 }
