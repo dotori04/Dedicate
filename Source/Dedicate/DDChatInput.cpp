@@ -33,7 +33,7 @@ void UDDChatInput::OnChatInputTextCommitted(const FText& Text, ETextCommit::Type
 		ADDPlayerController* OwningPlayerController = Cast<ADDPlayerController>(GetOwningPlayer());
 		if (IsValid(OwningPlayerController) == true)
 		{
-			OwningPlayerController->SetChatMessageString(Text.ToString());
+			OwningPlayerController->SetChatMessagesString(Text.ToString());
 			EditableTextBox_ChatInput->SetText(FText());
 		}
 	}
