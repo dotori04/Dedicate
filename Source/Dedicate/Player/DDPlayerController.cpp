@@ -4,6 +4,7 @@
 #include "Player/DDPlayerController.h"
 
 #include "DDChatInput.h"
+#include "DDTimer.h"
 #include "DDPlayerState.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "Dedicate.h"
@@ -35,6 +36,19 @@ void ADDPlayerController::BeginPlay()
 		{
 			ChatInputWidgetInstance->AddToViewport();
 		}
+	}
+
+	if (IsValid(TimerWidgetClass) == true)
+	{
+		TimerWidgetInstance = CreateWidget<UDDTimer>(this, TimerWidgetClass);
+		if (IsValid(TimerWidgetInstance) == true)
+		{
+			TimerWidgetInstance->AddToViewport();
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("TimerWidgetClass is None"));
 	}
 	
 	if (IsValid(NotificationTextWidgetClass) == true)
@@ -107,6 +121,11 @@ void ADDPlayerController::ClientRPCPrintGuessLimitExceeded_Implementation()
 void ADDPlayerController::ClientRPCPrintInvalidGuess_Implementation()
 {
 	DedicateFunctionLibrary::MyPrintString(this, TEXT("유효하지않은 정답입니다."), 5.0f, FColor::Red);
+}
+
+void ADDPlayerController::ClientRPCPrintNotPlayerTurn_Implementation()
+{
+	DedicateFunctionLibrary::MyPrintString(this, TEXT("현재 정답 입력 순서가 아닙니다."), 5.0f, FColor::Red);
 }
 
 void ADDPlayerController::ServerRPCPrintChatMessageString_Implementation(const FString& InChatMessageString)

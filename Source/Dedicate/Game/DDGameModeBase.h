@@ -17,7 +17,8 @@ class DEDICATE_API ADDGameModeBase : public AGameModeBase
 	GENERATED_BODY()
 	
 public:
-	virtual void OnPostLogin(AController* NewPlayer) override;	
+	virtual void OnPostLogin(AController* NewPlayer) override;
+	virtual void Logout(AController* Exiting) override;
 	
 	FString GenerateSecretNumber();
 
@@ -34,10 +35,27 @@ public:
 	void ResetGame();
 
 	void JudgeGame(ADDPlayerController* InChattingPlayerController, int InStrikeCount);
+
+	bool IsPlayerTurn(const ADDPlayerController* InPlayerController) const;
+
+	void AdvanceTurn();
+
+	void UpdateTurnPlayerState();
+
+	void ResetTurnTimer();
+
+	void UpdateTurnTimer();
 	
 protected:
+	UPROPERTY(EditDefaultsOnly)
+	int32 TurnDuration = 10;
+
 	FString SecretNumberString;
 	
-	TArray<TObjectPtr<ADDPlayerController>> AllPlayerControllers; 
+	TArray<TObjectPtr<ADDPlayerController>> AllPlayerControllers;
+
+	int32 CurrentTurnIndex = INDEX_NONE;
+
+	FTimerHandle TurnTimerHandle;
 	
 };

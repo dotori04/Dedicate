@@ -7,6 +7,7 @@
 #include "DDPlayerController.generated.h"
 
 class UDDChatInput;
+class UDDTimer;
 
 UCLASS()
 class DEDICATE_API ADDPlayerController : public APlayerController
@@ -27,6 +28,8 @@ public:
 	void ClientRPCPrintGuessLimitExceeded();
 	UFUNCTION(Client, Reliable)
 	void ClientRPCPrintInvalidGuess();
+	UFUNCTION(Client, Reliable)
+	void ClientRPCPrintNotPlayerTurn();
 	UFUNCTION(Server, Reliable)
 	void ServerRPCPrintChatMessageString(const FString& InChatMessageString);
 	virtual void GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const override;
@@ -37,11 +40,21 @@ public:
 protected:
 	UPROPERTY(EditDefaultsOnly)
 	TSubclassOf<UDDChatInput> ChatInputWidgetClass;
+	
 	UPROPERTY()
 	TObjectPtr<UDDChatInput> ChatInputWidgetInstance;
+	
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+	TSubclassOf<UDDTimer> TimerWidgetClass;
+	
+	UPROPERTY()
+	TObjectPtr<UDDTimer> TimerWidgetInstance;
+	
 	UPROPERTY(EditDefaultsOnly)
 	TSubclassOf<UUserWidget> NotificationTextWidgetClass;
+	
 	UPROPERTY()
 	TObjectPtr<UUserWidget> NotificationTextWidgetInstance;
+	
 	FString ChatMessageString;
 };

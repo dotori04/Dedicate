@@ -5,7 +5,9 @@
 #include "DDGameStateBase.h"
 #include "Player/DDPlayerController.h"
 #include "EngineUtils.h"
+#include "Engine/World.h"
 #include "Player/DDPlayerState.h"
+#include "TimerManager.h"
 
 void ADDGameModeBase::OnPostLogin(AController* NewPlayer)
 {
@@ -28,8 +30,46 @@ void ADDGameModeBase::OnPostLogin(AController* NewPlayer)
 		{
 			DDGameStateBase->MulticastRPCBroadcastLoginMessage(DDPS->PlyaerNameString);
 		}
+
+		if (CurrentTurnIndex == INDEX_NONE)
+		{
+			CurrentTurnIndex = 0;
+			ResetTurnTimer();
+		}
+
+		UpdateTurnPlayerState();
 	}
 
+}
+
+void ADDGameModeBase::Logout(AController* Exiting)
+{
+	ADDPlayerController* ExitingPlayerController = Cast<ADDPlayerController>(Exiting);
+	int32 ExitingPlayerIndex = AllPlayerControllers.IndexOfByKey(ExitingPlayerController);
+	if (ExitingPlayerIndex != INDEX_NONE)
+	{
+		bool IsCurrentTurnPlayer = ExitingPlayerIndex == CurrentTurnIndex;
+		AllPlayerControllers.RemoveAt(ExitingPlayerIndex);
+
+		if (AllPlayerControllers.IsEmpty() == true)
+		{
+			CurrentTurnIndex = INDEX_NONE;
+			GetWorldTimerManager().ClearTimer(TurnTimerHandle);
+		}
+		else if (IsCurrentTurnPlayer == true)
+		{
+			CurrentTurnIndex %= AllPlayerControllers.Num();
+			ResetTurnTimer();
+		}
+		else if (ExitingPlayerIndex < CurrentTurnIndex)
+		{
+			CurrentTurnIndex--;
+		}
+
+		UpdateTurnPlayerState();
+	}
+
+	Super::Logout(Exiting);
 }
 
 FString ADDGameModeBase::GenerateSecretNumber()
@@ -146,6 +186,18 @@ void ADDGameModeBase::PrintChatMessageString(ADDPlayerController* InChattingPlay
 			return;
 		}
 
+		const ADDGameStateBase* DDGameStateBase = GetGameState<ADDGameStateBase>();
+		if (IsValid(DDGameStateBase) == true && DDGameStateBase->RemainingTurnTime <= 0)
+		{
+			return;
+		}
+
+		if (IsPlayerTurn(InChattingPlayerController) == false)
+		{
+			InChattingPlayerController->ClientRPCPrintNotPlayerTurn();
+			return;
+		}
+
 		FString JudgeResultString = JudgeResult(SecretNumberString, GuessNumberString);
 		IncreaseGuessCount(InChattingPlayerController);
 		for (TActorIterator<ADDPlayerController> It(GetWorld()); It; ++It)
@@ -155,10 +207,12 @@ void ADDGameModeBase::PrintChatMessageString(ADDPlayerController* InChattingPlay
 			{
 				FString CombinedMessageString = InChatMessageString + TEXT(" -> ") + JudgeResultString;
 				DDPlayerController->ClientRPCPrintChatMessageString(CombinedMessageString);
-				int32 StrikeCount = FCString::Atoi(*JudgeResultString.Left(1));
-				JudgeGame(InChattingPlayerController, StrikeCount);
 			}
 		}
+
+		int32 StrikeCount = FCString::Atoi(*JudgeResultString.Left(1));
+		JudgeGame(InChattingPlayerController, StrikeCount);
+		AdvanceTurn();
 	}
 	else
 	{
@@ -208,10 +262,10 @@ void ADDGameModeBase::JudgeGame(ADDPlayerController* InChattingPlayerController,
 			{
 				FString CombinedMessageString = DDPS->PlyaerNameString + TEXT(" has won the game.");
 				DDPlayerController->NotificationText = FText::FromString(CombinedMessageString);
-
-				ResetGame();
 			}
 		}
+
+		ResetGame();
 	}
 	else
 	{
@@ -234,9 +288,102 @@ void ADDGameModeBase::JudgeGame(ADDPlayerController* InChattingPlayerController,
 			for (const auto& DDPlayerController : AllPlayerControllers)
 			{
 				DDPlayerController->NotificationText = FText::FromString(TEXT("Draw..."));
-
-				ResetGame();
 			}
+
+			ResetGame();
 		}
+	}
+}
+
+bool ADDGameModeBase::IsPlayerTurn(const ADDPlayerController* InPlayerController) const
+{
+	return AllPlayerControllers.IsValidIndex(CurrentTurnIndex)
+		&& AllPlayerControllers[CurrentTurnIndex] == InPlayerController;
+}
+
+void ADDGameModeBase::AdvanceTurn()
+{
+	if (AllPlayerControllers.IsEmpty() == true)
+	{
+		CurrentTurnIndex = INDEX_NONE;
+		UpdateTurnPlayerState();
+		return;
+	}
+
+	for (int32 Offset = 1; Offset <= AllPlayerControllers.Num(); ++Offset)
+	{
+		int32 NextTurnIndex = (CurrentTurnIndex + Offset) % AllPlayerControllers.Num();
+		ADDPlayerController* PlayerController = AllPlayerControllers[NextTurnIndex];
+		ADDPlayerState* PlayerState = PlayerController->GetPlayerState<ADDPlayerState>();
+		if (IsValid(PlayerState) == true && PlayerState->CurrentGuessCount < PlayerState->MaxGuessCount)
+		{
+			CurrentTurnIndex = NextTurnIndex;
+			break;
+		}
+	}
+
+	UpdateTurnPlayerState();
+	ResetTurnTimer();
+}
+
+void ADDGameModeBase::UpdateTurnPlayerState()
+{
+	ADDGameStateBase* DDGameStateBase = GetGameState<ADDGameStateBase>();
+	if (IsValid(DDGameStateBase) == false)
+	{
+		return;
+	}
+
+	DDGameStateBase->CurrentTurnPlayerState = AllPlayerControllers.IsValidIndex(CurrentTurnIndex)
+		? AllPlayerControllers[CurrentTurnIndex]->GetPlayerState<ADDPlayerState>()
+		: nullptr;
+
+	if (IsValid(DDGameStateBase->CurrentTurnPlayerState) == false)
+	{
+		DDGameStateBase->RemainingTurnTime = 0;
+		return;
+	}
+
+	FString TurnNotificationString = DDGameStateBase->CurrentTurnPlayerState->PlyaerNameString + TEXT(" 차례입니다.");
+	for (const auto& DDPlayerController : AllPlayerControllers)
+	{
+		if (IsValid(DDPlayerController) == true)
+		{
+			DDPlayerController->NotificationText = FText::FromString(TurnNotificationString);
+		}
+	}
+}
+
+void ADDGameModeBase::ResetTurnTimer()
+{
+	ADDGameStateBase* DDGameStateBase = GetGameState<ADDGameStateBase>();
+	if (IsValid(DDGameStateBase) == false)
+	{
+		return;
+	}
+
+	DDGameStateBase->RemainingTurnTime = TurnDuration;
+	GetWorldTimerManager().SetTimer(TurnTimerHandle, this, &ThisClass::UpdateTurnTimer, 1.0f, true);
+}
+
+void ADDGameModeBase::UpdateTurnTimer()
+{
+	ADDGameStateBase* DDGameStateBase = GetGameState<ADDGameStateBase>();
+	if (IsValid(DDGameStateBase) == false)
+	{
+		return;
+	}
+
+	DDGameStateBase->RemainingTurnTime = FMath::Max(0, DDGameStateBase->RemainingTurnTime - 1);
+	if (DDGameStateBase->RemainingTurnTime == 0)
+	{
+		if (AllPlayerControllers.IsValidIndex(CurrentTurnIndex) == true)
+		{
+			ADDPlayerController* CurrentPlayerController = AllPlayerControllers[CurrentTurnIndex];
+			IncreaseGuessCount(CurrentPlayerController);
+			JudgeGame(CurrentPlayerController, 0);
+		}
+
+		AdvanceTurn();
 	}
 }
