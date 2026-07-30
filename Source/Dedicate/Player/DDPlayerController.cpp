@@ -10,6 +10,12 @@
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
 #include "Game/DDGameModeBase.h"
+#include "Net/UnrealNetwork.h"
+
+ADDPlayerController::ADDPlayerController()
+{
+	bReplicates = true;
+}
 
 void ADDPlayerController::BeginPlay()
 {
@@ -28,6 +34,17 @@ void ADDPlayerController::BeginPlay()
 		if (IsValid(ChatInputWidgetInstance) == true)
 		{
 			ChatInputWidgetInstance->AddToViewport();
+		}
+	}
+	
+	if (IsValid(NotificationTextWidgetClass) == true)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("NotificationTextWidgetClass"));
+		NotificationTextWidgetInstance = CreateWidget<UUserWidget>(this, NotificationTextWidgetClass);
+		if (IsValid(NotificationTextWidgetInstance) == true)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("NotificationTextWidgetInstance"));
+			NotificationTextWidgetInstance->AddToViewport();
 		}
 	}
 }
@@ -68,7 +85,10 @@ void ADDPlayerController::SetChatMessagesString(const FString& InChatMessagesStr
 		ADDPlayerState* DDPS = GetPlayerState<ADDPlayerState>();
 		if (IsValid(DDPS) == true)
 		{
-			FString CombinedMessageString = DDPS->GetPlayerInfoString() + TEXT(": ") + InChatMessagesString;
+			FString PlayerInfoString = InChatMessagesString.IsNumeric()
+				? DDPS->GetPlayerInfoString()
+				: DDPS->PlyaerNameString;
+			FString CombinedMessageString = PlayerInfoString + TEXT(": ") + InChatMessagesString;
 			ServerRPCPrintChatMessageString(CombinedMessageString);
 		}
 	}
@@ -77,6 +97,16 @@ void ADDPlayerController::SetChatMessagesString(const FString& InChatMessagesStr
 void ADDPlayerController::ClientRPCPrintChatMessageString_Implementation(const FString& InChatMessageString)
 {
 	PrintChatMessageString(InChatMessageString);
+}
+
+void ADDPlayerController::ClientRPCPrintGuessLimitExceeded_Implementation()
+{
+	DedicateFunctionLibrary::MyPrintString(this, TEXT("입력최대횟수초과"), 5.0f, FColor::Red);
+}
+
+void ADDPlayerController::ClientRPCPrintInvalidGuess_Implementation()
+{
+	DedicateFunctionLibrary::MyPrintString(this, TEXT("유효하지않은 정답입니다."), 5.0f, FColor::Red);
 }
 
 void ADDPlayerController::ServerRPCPrintChatMessageString_Implementation(const FString& InChatMessageString)
@@ -90,4 +120,11 @@ void ADDPlayerController::ServerRPCPrintChatMessageString_Implementation(const F
 			CXGM->PrintChatMessageString(this, InChatMessageString);
 		}
 	}
+}
+
+void ADDPlayerController::GetLifetimeReplicatedProps(TArray<class FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(ThisClass, NotificationText);
 }

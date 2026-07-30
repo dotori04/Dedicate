@@ -14,18 +14,19 @@ void ADDGameModeBase::OnPostLogin(AController* NewPlayer)
 	ADDPlayerController* DDPlayerController = Cast<ADDPlayerController>(NewPlayer);
 	if (IsValid(DDPlayerController) == true)
 	{
+		DDPlayerController->NotificationText = FText::FromString(TEXT("Connected to the game server."));
 		AllPlayerControllers.Add(DDPlayerController);
 
-		ADDPlayerState* CXPS = DDPlayerController->GetPlayerState<ADDPlayerState>();
-		if (IsValid(CXPS) == true)
+		ADDPlayerState* DDPS = DDPlayerController->GetPlayerState<ADDPlayerState>();
+		if (IsValid(DDPS) == true)
 		{
-			CXPS->PlyaerNameString = TEXT("Player") + FString::FromInt(AllPlayerControllers.Num());
+			DDPS->PlyaerNameString = TEXT("Player") + FString::FromInt(AllPlayerControllers.Num());
 		}
 
-		ADDGameStateBase* CXGameStateBase =  GetGameState<ADDGameStateBase>();
-		if (IsValid(CXGameStateBase) == true)
+		ADDGameStateBase* DDGameStateBase =  GetGameState<ADDGameStateBase>();
+		if (IsValid(DDGameStateBase) == true)
 		{
-			CXGameStateBase->MulticastRPCBroadcastLoginMessage(CXPS->PlyaerNameString);
+			DDGameStateBase->MulticastRPCBroadcastLoginMessage(DDPS->PlyaerNameString);
 		}
 	}
 
@@ -68,7 +69,7 @@ bool ADDGameModeBase::IsGuessNumberString(const FString& InNumberString)
 		TSet<TCHAR> UniqueDigits;
 		for (TCHAR C : InNumberString)
 		{
-			if (FChar::IsDigit(C) == false || C == '0')
+			if (FChar::IsDigit(C) == false || C == '0' || UniqueDigits.Contains(C) == true)
 			{
 				bIsUnique = false;
 				break;
@@ -126,19 +127,36 @@ void ADDGameModeBase::BeginPlay()
 
 void ADDGameModeBase::PrintChatMessageString(ADDPlayerController* InChattingPlayerController, const FString& InChatMessageString)
 {
-	int Index = InChatMessageString.Len() - 3;
-	FString GuessNumberString = InChatMessageString.RightChop(Index);
+	int32 SeparatorIndex = INDEX_NONE;
+	InChatMessageString.FindLastChar(TEXT(':'), SeparatorIndex);
+	FString GuessNumberString = InChatMessageString.Mid(SeparatorIndex + 1).TrimStartAndEnd();
+
+	if (GuessNumberString.IsNumeric() == true && IsGuessNumberString(GuessNumberString) == false)
+	{
+		InChattingPlayerController->ClientRPCPrintInvalidGuess();
+		return;
+	}
+
 	if (IsGuessNumberString(GuessNumberString) == true)
 	{
+		ADDPlayerState* DDPlayerState = InChattingPlayerController->GetPlayerState<ADDPlayerState>();
+		if (IsValid(DDPlayerState) == true && DDPlayerState->CurrentGuessCount >= DDPlayerState->MaxGuessCount)
+		{
+			InChattingPlayerController->ClientRPCPrintGuessLimitExceeded();
+			return;
+		}
+
 		FString JudgeResultString = JudgeResult(SecretNumberString, GuessNumberString);
 		IncreaseGuessCount(InChattingPlayerController);
 		for (TActorIterator<ADDPlayerController> It(GetWorld()); It; ++It)
 		{
-			ADDPlayerController* CXPlayerController = *It;
-			if (IsValid(CXPlayerController) == true)
+			ADDPlayerController* DDPlayerController = *It;
+			if (IsValid(DDPlayerController) == true)
 			{
 				FString CombinedMessageString = InChatMessageString + TEXT(" -> ") + JudgeResultString;
-				CXPlayerController->ClientRPCPrintChatMessageString(CombinedMessageString);
+				DDPlayerController->ClientRPCPrintChatMessageString(CombinedMessageString);
+				int32 StrikeCount = FCString::Atoi(*JudgeResultString.Left(1));
+				JudgeGame(InChattingPlayerController, StrikeCount);
 			}
 		}
 	}
@@ -161,5 +179,64 @@ void ADDGameModeBase::IncreaseGuessCount(ADDPlayerController* InChattingPlayerCo
 	if (IsValid(DDPS) == true)
 	{
 		DDPS->CurrentGuessCount++;
+	}
+}
+
+void ADDGameModeBase::ResetGame()
+{
+	SecretNumberString = GenerateSecretNumber();
+
+	for (const auto& DDPlayerController : AllPlayerControllers)
+	{
+		ADDPlayerState* DDPS = DDPlayerController->GetPlayerState<ADDPlayerState>();
+		if (IsValid(DDPS) == true)
+		{
+			DDPS->CurrentGuessCount = 0;
+			DDPlayerController->NotificationText = FText::FromString(TEXT("GameStarted"));
+		}
+	}
+}
+
+void ADDGameModeBase::JudgeGame(ADDPlayerController* InChattingPlayerController, int InStrikeCount)
+{
+	if (3 == InStrikeCount)
+	{
+		ADDPlayerState* DDPS = InChattingPlayerController->GetPlayerState<ADDPlayerState>();
+		for (const auto& DDPlayerController : AllPlayerControllers)
+		{
+			if (IsValid(DDPS) == true)
+			{
+				FString CombinedMessageString = DDPS->PlyaerNameString + TEXT(" has won the game.");
+				DDPlayerController->NotificationText = FText::FromString(CombinedMessageString);
+
+				ResetGame();
+			}
+		}
+	}
+	else
+	{
+		bool bIsDraw = true;
+		for (const auto& DDPlayerController : AllPlayerControllers)
+		{
+			ADDPlayerState* DDPS = DDPlayerController->GetPlayerState<ADDPlayerState>();
+			if (IsValid(DDPS) == true)
+			{
+				if (DDPS->CurrentGuessCount < DDPS->MaxGuessCount)
+				{
+					bIsDraw = false;
+					break;
+				}
+			}
+		}
+
+		if (true == bIsDraw)
+		{
+			for (const auto& DDPlayerController : AllPlayerControllers)
+			{
+				DDPlayerController->NotificationText = FText::FromString(TEXT("Draw..."));
+
+				ResetGame();
+			}
+		}
 	}
 }

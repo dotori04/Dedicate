@@ -31,6 +31,10 @@ public:
 
 	void IncreaseGuessCount(ADDPlayerController* InChattingPlayerController);
 	
+	void ResetGame();
+
+	void JudgeGame(ADDPlayerController* InChattingPlayerController, int InStrikeCount);
+	
 protected:
 	FString SecretNumberString;
 	
