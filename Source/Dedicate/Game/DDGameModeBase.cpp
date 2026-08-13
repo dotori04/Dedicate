@@ -344,12 +344,19 @@ void ADDGameModeBase::UpdateTurnPlayerState()
 		return;
 	}
 
-	FString TurnNotificationString = DDGameStateBase->CurrentTurnPlayerState->PlyaerNameString + TEXT(" 차례입니다.");
 	for (const auto& DDPlayerController : AllPlayerControllers)
 	{
 		if (IsValid(DDPlayerController) == true)
 		{
-			DDPlayerController->NotificationText = FText::FromString(TurnNotificationString);
+			const ADDPlayerState* DDPlayerState = DDPlayerController->GetPlayerState<ADDPlayerState>();
+			if (IsValid(DDPlayerState) == true)
+			{
+				const FString TurnNotificationString = FString::Printf(
+					TEXT("%s\n%s 차례입니다."),
+					*DDPlayerState->PlyaerNameString,
+					*DDGameStateBase->CurrentTurnPlayerState->PlyaerNameString);
+				DDPlayerController->NotificationText = FText::FromString(TurnNotificationString);
+			}
 		}
 	}
 }
